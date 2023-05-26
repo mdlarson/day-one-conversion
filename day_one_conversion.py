@@ -10,22 +10,38 @@ with open('DayOneArchive.json', 'r', encoding='utf8') as file:
 MARKDOWN_CONTENT = ""
 
 for entry in data['entries']:
-    title = entry['creationDate']
-    content = entry['text']
-    
-    main_entry = f"# {title}\n\n\
-                    {content}\n\n"
+    date_line = entry['creationDate']
+    journal_entry = entry['text']
+
+    # if 'location' in entry:
+    #     city = entry['location']['localityName']
+    #     place = entry['location']['placeName']
+    #     lat = entry['location']['latitude']
+    #     long = entry['location']['longitude']
+    #     country = entry['location']['country']
+    #     loc_line = f"{place}, {city}, {country}\n{lat}, {long}"
+    # else:
+    #     pass
 
     if 'weather' in entry:
         # convert C to F
-        weather_temp = ((entry['weather']['temperatureCelsius'] * 9) / 5) + 32
-        weather_description = entry['weather']['conditionsDescription']
-        weather_entry = f"### {weather_temp}°, {weather_description}\n\n"
+        wx_temp = ((entry['weather']['temperatureCelsius'] * 9) / 5) + 32
+        wx_description = entry['weather']['conditionsDescription']
+        wx_line = f"{wx_temp}°, {wx_description}"
     else:
         pass
 
-    MARKDOWN_CONTENT += main_entry
-    MARKDOWN_CONTENT += weather_entry
+    if 'tags' in entry:
+        tag_list = ', '.join(entry['tags'])
+    else:
+        pass
+
+    MARKDOWN_CONTENT += f"##{date_line}\n"
+    # MARKDOWN_CONTENT += f"##{loc_line}\n"
+    MARKDOWN_CONTENT += f"###{wx_line}\n\n"
+    MARKDOWN_CONTENT += f"{journal_entry}\n\n"
+    MARKDOWN_CONTENT += f"*{tag_list}*\n\n"
+
 
 # Write Markdown content to a file
 with open('journal_entries.md', 'w', encoding='utf8') as file:
