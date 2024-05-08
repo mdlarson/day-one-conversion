@@ -1,64 +1,96 @@
-"""Script to convert Day One journal archives JSON to Markdown."""
+"""Script to convert Day One journal archives from JSON to HTML/PDF."""
 
 import json
 import re
 from datetime import datetime
+from weasyprint import HTML
 
-# read the JSON file
-with open('DayOneArchive.json', 'r', encoding='utf8') as file:
+# Define regex to find unused image references
+# example: ![](dayone-moment:\/\/C5B5BC18EEB544D8A8D6F81A4B510B09)\n\n
+image_pattern = re.compile(
+    r'^\s*!\[\]\(dayone-moment:\/\/[A-Z0-9]{32}\)\n*$', re.MULTILINE)
+p_break = re.compile(r'<p>\s*<br\s*/?>')
+
+# Initialize HTML document as list of entries
+html_parts = [
+    """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journal Entries</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    """
+]
+
+# Read the JSON file
+with open('DayOneSample.json', 'r', encoding='utf8') as file:
     data = json.load(file)
 
-# iterate over entries and add to journal
-md_content = ""
-
+# Iterate over entries, parse data, append to list
 for entry in data['entries']:
     # convert datetimes
-    # example original: 2014–03–07T22:44:45Z
     raw_date = datetime.strptime(entry['creationDate'], '%Y-%m-%dT%H:%M:%SZ')
     date_line = raw_date.strftime('%A, %B %d, %Y at %I:%M%p')
 
-    # remove images
-    # example: ![](dayone-moment:\/\/C5B5BC18EEB544D8A8D6F81A4B510B09)\n\n
-    entry_raw = entry['text']
-    journal_entry = re.sub(r"\!\[\]\(dayone-moment\:\/\/[A-Z0-9]{32}\)",
-                           "",
-                           entry_raw)
+    # use regex to remove image references
+    journal_entry = image_pattern.sub("", entry['text'])
 
-    # process location data
-    if 'location' in entry:
-        if 'localityName' in entry['location']:
-            city = entry['location']['localityName']
-        place = entry['location']['placeName']
-        lat = entry['location']['latitude']
-        long = entry['location']['longitude']
-        country = entry['location']['country']
-        loc_line = f"{place}, {city}, {country} ᭼ {lat}, {long}"
-    else:
-        pass
+    # process text to remove extraneous newlines
+    journal_entry = journal_entry.replace('\n\n', '</p><p>')
+    journal_entry = journal_entry.replace('\n', '<br>')
+    journal_entry = journal_entry.replace('<br><br><br><br>', '<br>')
+    journal_entry = journal_entry.replace('<br><br><br>', '<br>')
+    journal_entry = journal_entry.replace('<p><br>', '<p>')
 
-    # convert weather data
-    if 'weather' in entry:
-        # convert C to F
-        wx_temp = ((entry['weather']['temperatureCelsius'] * 9) / 5) + 32
-        wx_description = entry['weather']['conditionsDescription']
-        wx_line = f"{wx_temp}°, {wx_description}"
-    else:
-        pass
+    # parse location data
+    location_info = entry.get('location', {})
+    city = location_info.get('localityName', 'Unknown')
+    place = location_info.get('placeName', 'Unknown')
+    lat = location_info.get('latitude', 0)
+    long = location_info.get('longitude', 0)
+    country = location_info.get('country', 'Unknown')
 
-    # compile tags
-    if 'tags' in entry:
-        tag_list = ', '.join(entry['tags'])
-    else:
-        pass
+    # parse weather data
+    weather_info = entry.get('weather', {})
+    wx_temp = ((weather_info.get('temperatureCelsius', 0) * 9) / 5) + 32
+    wx_description = weather_info.get(
+        'conditionsDescription', 'No weather data')
+    wx_line = f"{wx_temp}°F, {wx_description}"
 
-    # sequence and format entry content
-    md_content += f"##{date_line}\n"
-    md_content += f"{loc_line}\n"
-    md_content += f"{wx_line}\n\n"
-    md_content += f"{journal_entry}\n\n"
-    md_content += f"༶ *{tag_list}*\n\n"
+    # fetch the tags
+    tags = ', '.join(entry.get('tags', []))
 
+    # append HTML entry + metadata to list
+    html_parts.append(f"""
+<div class="journal-entry">
+    <div class="entry-metadata">
+    <h3>{date_line}</h3>
+    <p class="geo">☉ {wx_line}</p>
+    <p class="geo">⌂ {place}, {city}, {country}</p>
+    <p class="geo">☷ {lat}, {long}</p>
+    <p class="tags">༶ {tags}</p>
+    </div>
+    <div class="entry-content">
+    <p>{journal_entry}</p>
+    </div>
+</div>
+    """)
 
-# write entries to file
-with open('journal_entries.md', 'w', encoding='utf8') as file:
-    file.write(md_content)
+# Close and assemble the HTML entries
+html_parts.append("""
+</body>
+</html>
+""")
+
+html_content = ''.join(html_parts)
+html_content = p_break.sub('<p>', html_content)
+
+# Write entries to HTML file and generate PDF
+with open('sample.html', 'w', encoding='utf8') as file:
+    file.write(''.join(html_content))
+
+HTML('sample.html').write_pdf('sample.pdf')
